@@ -1,0 +1,7 @@
+**TODO**
+
+[] Create oAuth2 management objects
+[] Create end to end test for the WeeklyItemBostrap 
+[] Rename package to Buyer. We will have one package for each API domain (buyer)
+[] Implement API to retrieve all categories
+
