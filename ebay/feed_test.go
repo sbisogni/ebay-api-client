@@ -17,9 +17,9 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-func NewHTTPRequest(rangeLower, rangeUpper int64, categoryID, marketID string) *http.Request {
+func newHTTPRequest(rangeLower, rangeUpper int64, categoryID, marketID, endPoint string) *http.Request {
 
-	u, _ := url.Parse(sboxDefaultBaseURL + itemPath)
+	u, _ := url.Parse(endPoint)
 	q, _ := query.Values(queryParams{
 		Scope: itemAllActive, CategoryID: categoryID})
 
@@ -35,7 +35,7 @@ func NewHTTPRequest(rangeLower, rangeUpper int64, categoryID, marketID string) *
 	return r
 }
 
-func NewHTTPResponse(statusCode int, rangeLower, rangeUpper, lenght int64, lastModified, body string) *http.Response {
+func newHTTPResponse(statusCode int, rangeLower, rangeUpper, lenght int64, lastModified, body string) *http.Response {
 
 	rs := &http.Response{Header: make(http.Header)}
 
@@ -70,7 +70,7 @@ func Test_buildEndpointURL(t *testing.T) {
 			args: args{
 				feedCtx: &feedContext{
 					baseURL: expBaseURL,
-					pathURL: "item",
+					pathURL: itemPath,
 					params: &queryParams{
 						Scope:      itemAllActive,
 						CategoryID: "1",
@@ -85,7 +85,7 @@ func Test_buildEndpointURL(t *testing.T) {
 			args: args{
 				feedCtx: &feedContext{
 					baseURL: expBaseURL,
-					pathURL: "item",
+					pathURL: itemPath,
 					params:  &queryParams{Scope: itemAllActive, CategoryID: "1", Date: "20200419"},
 				},
 			},
@@ -212,15 +212,6 @@ func Test_buildHTTPRequest(t *testing.T) {
 		}
 	}
 
-	expHTTPRequest := func() *http.Request {
-		endpointURL := "https://api.sandbox.ebay.com/buy/feed/v1_beta/item?category_id=1&feed_scope=ALL_ACTIVE"
-		rs, _ := http.NewRequest("GET", endpointURL, nil)
-		rs.Header.Set(headerRange, fmt.Sprintf("bytes=%v-%v", expRangeLower, expRangeUpper))
-		rs.Header.Set(headerMarketplaceID, expMarketID)
-		rs.WithContext(expCtx)
-		return rs
-	}
-
 	tests := []struct {
 		name    string
 		args    args
@@ -230,7 +221,7 @@ func Test_buildHTTPRequest(t *testing.T) {
 		{
 			name:    "is feed http response created?",
 			args:    arguments(),
-			want:    expHTTPRequest(),
+			want:    newHTTPRequest(expRangeLower, expRangeUpper, expCategoryID, expMarketID, "https://api.sandbox.ebay.com/buy/feed/v1_beta/item?category_id=1&feed_scope=ALL_ACTIVE"),
 			wantErr: false,
 		},
 	}
@@ -256,6 +247,7 @@ func Test_IsWeeklyItemBoostrapPrecessingThreeChunks(t *testing.T) {
 		expLenght       int64  = 2000
 		expBodyChunk    string = "Hello World!"
 		expLastModified string = " Wed, 21 Oct 2015 07:28:00 GMT"
+		expEndPoint     string = sboxDefaultBaseURL + itemPath
 	)
 
 	ctrl := gomock.NewController(t)
@@ -269,22 +261,22 @@ func Test_IsWeeklyItemBoostrapPrecessingThreeChunks(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(NewHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID))).
-		Return(NewHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndPoint))).
+		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	rangeLower = rangeHigher + 1
 	rangeHigher = rangeHigher + sboxDefaultMaxChunkSize
 
 	m.EXPECT().
-		Do(gomock.Eq(NewHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID))).
-		Return(NewHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndPoint))).
+		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	rangeLower = rangeHigher + 1
 	rangeHigher = rangeHigher + sboxDefaultMaxChunkSize
 
 	m.EXPECT().
-		Do(gomock.Eq(NewHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID))).
-		Return(NewHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndPoint))).
+		Return(newHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	client, _ := NewSandboxClient(m)
 
@@ -308,6 +300,7 @@ func Test_IsWeeklyItemBoostrapPrecessingOneChunk(t *testing.T) {
 		expLenght       int64  = 2000
 		expBodyChunk    string = "Hello World!"
 		expLastModified string = "Wed, 21 Oct 2015 07:28:00 GMT"
+		expEndPoint     string = sboxDefaultBaseURL + itemPath
 	)
 
 	ctrl := gomock.NewController(t)
@@ -321,8 +314,8 @@ func Test_IsWeeklyItemBoostrapPrecessingOneChunk(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(NewHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID))).
-		Return(NewHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndPoint))).
+		Return(newHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	client, _ := NewSandboxClient(m)
 
@@ -345,6 +338,7 @@ func Test_IsWeeklyItemBoostrapReturningErrorReponse(t *testing.T) {
 		expCategoryID    string = "1"
 		expLenght        int64  = 2000
 		expLastModified  string = "Wed, 21 Oct 2015 07:28:00 GMT"
+		expEndPoint      string = sboxDefaultBaseURL + itemPath
 		expErrorResponse string = `{
 		"errors": [{
 			"errorId": 13022,
@@ -367,8 +361,8 @@ func Test_IsWeeklyItemBoostrapReturningErrorReponse(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(NewHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID))).
-		Return(NewHTTPResponse(http.StatusBadRequest, rangeLower, rangeHigher, expLenght, expLastModified, expErrorResponse), nil)
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndPoint))).
+		Return(newHTTPResponse(http.StatusBadRequest, rangeLower, rangeHigher, expLenght, expLastModified, expErrorResponse), nil)
 
 	client, _ := NewSandboxClient(m)
 
@@ -384,6 +378,7 @@ func Test_IsWeeklyItemBoostrapSizeZeroIfNoContentFound(t *testing.T) {
 		expMarketID   string = "EBAY_US"
 		expCategoryID string = "1"
 		expLenght     int64  = 0
+		expEndPoint   string = sboxDefaultBaseURL + itemPath
 	)
 
 	ctrl := gomock.NewController(t)
@@ -397,8 +392,8 @@ func Test_IsWeeklyItemBoostrapSizeZeroIfNoContentFound(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(NewHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID))).
-		Return(NewHTTPResponse(http.StatusNoContent, 0, 0, 0, "", ""), nil)
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndPoint))).
+		Return(newHTTPResponse(http.StatusNoContent, 0, 0, 0, "", ""), nil)
 
 	client, _ := NewSandboxClient(m)
 
