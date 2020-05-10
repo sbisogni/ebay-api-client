@@ -39,7 +39,7 @@ func (e *ErrorResponse) Error() string {
 	var log []string
 
 	log = append(log, e.Message)
-	log = append(log, tostring(e.Response.Request))
+	log = append(log, HTTPRequestToString(e.Response.Request))
 	log = append(log, fmt.Sprintf("Respose Code: %d", e.Response.StatusCode))
 	log = append(log, fmt.Sprintf("Erros: %+v", e.Errors))
 	log = append(log, fmt.Sprintf("Warnings: %+v", e.Warnings))
@@ -71,7 +71,8 @@ func NewErrorResponse(rs *http.Response) *ErrorResponse {
 	return errorResponse
 }
 
-func tostring(rq *http.Request) string {
+// HTTPRequestToString transforms the given HTTP Request in a string
+func HTTPRequestToString(rq *http.Request) string {
 	if rq == nil {
 		return "HTTP Request is <nil>"
 	}
