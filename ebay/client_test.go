@@ -14,8 +14,7 @@ func Test_IsNewSandboxClientCreated(t *testing.T) {
 	client, OK := NewSandboxClient(expectedHTTPClient)
 	assert.Assert(t, OK)
 
-	assert.Equal(t, client.baseURL.String(), sboxDefaultBaseURL)
-	assert.Equal(t, client.maxChunkSize, sboxDefaultMaxChunkSize)
+	assert.Equal(t, client.baseURL.String(), defaultSandboxBaseURL)
 	assert.Equal(t, client.httpClient, expectedHTTPClient)
 }
 
@@ -31,8 +30,7 @@ func Test_IsNewProdClient(t *testing.T) {
 	client, OK := NewProdClient(expectedHTTPClient)
 	assert.Assert(t, OK)
 
-	assert.Equal(t, client.baseURL.String(), prodDefaultBaseURL)
-	assert.Equal(t, client.maxChunkSize, prodDefaultMaxChunkSize)
+	assert.Equal(t, client.baseURL.String(), defaultProdBaseURL)
 	assert.Equal(t, client.httpClient, expectedHTTPClient)
 }
 

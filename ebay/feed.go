@@ -13,22 +13,41 @@ import (
 )
 
 const (
+	// DefaultAPIVersion is the default API version
+	DefaultAPIVersion string = "v1_beta"
 
-	// Item API
+	// defaultSandboxBaseURL is the default base url for the Feed API in the sandbox environment
+	defaultSandboxBaseURL string = "https://api.sandbox.ebay.com/buy/feed/"
+	// defaultSandboxMaxChunkSize is the default max chunk size supported in the sandbox environment
+	defaultSandboxMaxChunkSize int64 = 1048576
 
-	itemPath        = "item"
-	itemNewlyListed = "NEWLY_LISTED"
-	itemAllActive   = "ALL_ACTIVE"
+	// defaultProdBaseURL is the default base url for the Feed API in the production environment
+	defaultProdBaseURL string = "https://api.ebay.com/buy/feed/"
+	// defaultProdMaxChunkSize is the default max chunk size supported in the production environment
+	defaultProdMaxChunkSize int64 = 10485760
+
+	//  Feed API Path
+	pathGetItem string = "item"
+
+	// Feed API Parameters
+	scopeNewlyListed string = "NEWLY_LISTED"
+	scopeAllActive   string = "ALL_ACTIVE"
 
 	// Header
-	headerRange        = "Range"
-	headerContentRange = "Content-range"
-	headerLastModified = "Last-Modified"
+	headerRange         string = "Range"
+	headerContentRange  string = "Content-range"
+	headerLastModified  string = "Last-Modified"
+	headerMarketplaceID string = "X-EBAY-C-MARKETPLACE-ID"
 )
 
 // FeedService handles the communication with eBay Feed API
 // https://developer.ebay.com/api-docs/buy/feed/overview.html
-type FeedService service
+type FeedService struct {
+	httpClient   HTTPClient
+	baseURL      string
+	version      string
+	maxChunkSize int64
+}
 
 // FeedInfo containts information about the feed when the download is successful
 // In case not content is found for the given feed criteria, the size will be zero
@@ -45,50 +64,43 @@ type FeedInfo struct {
 	Size int64
 }
 
-// WeeklyItemBoostrap downloads the latest weekly item boostrap file
+// WeeklyItemBoostrap downloads the latest weekly item boostrap file for the given eBay market id and category id.
+// The file is written into the given destination which has to implement the io.Writer interface.
+// The function returns a FeedInfo object encoding the information abouth the downloaded file. The Size field will be set to zero,
+// in the case, no boostrap file could be foud for the given market id and category id.
 // https://developer.ebay.com/api-docs/buy/feed/resources/item/methods/getItemFeed
-func (c *Client) WeeklyItemBoostrap(ctx context.Context, marketID, categoryID string, dst io.Writer) (*FeedInfo, error) {
-	return c.download(&feedContext{
-		ctx:      ctx,
-		baseURL:  c.baseURL,
-		pathURL:  itemPath,
-		marketID: marketID,
-		params: &queryParams{
-			Scope:      itemAllActive,
-			CategoryID: categoryID,
-		},
-	}, dst)
+func (f *FeedService) WeeklyItemBoostrap(ctx context.Context, marketID, categoryID string, dst io.Writer) (*FeedInfo, error) {
+	params := &feedParams{Scope: scopeAllActive, CategoryID: categoryID, marketID: marketID, apiPath: pathGetItem}
+	return f.download(ctx, params, dst)
 }
 
-// queryParams is Feed API query parameters
-type queryParams struct {
+// feedParams is Feed API query parameters
+type feedParams struct {
 	Scope      string `url:"feed_scope"`
 	CategoryID string `url:"category_id"`
 	Date       string `url:"date,omitempty"`
-}
-
-// feedContext is a helper struct to reduce the number input parametes passed among the internal methods
-type feedContext struct {
-	ctx      context.Context
-	baseURL  *url.URL
-	pathURL  string
-	marketID string
-	params   *queryParams
+	marketID   string
+	apiPath    string
 }
 
 // download is an helper function which implement the logic to download a multi-parts file feed
-func (c *Client) download(feedCtx *feedContext, dst io.Writer) (*FeedInfo, error) {
+func (f *FeedService) download(ctx context.Context, params *feedParams, dst io.Writer) (*FeedInfo, error) {
 
 	var (
 		rangeLower int64 = 0
-		rangeUpper int64 = c.maxChunkSize
+		rangeUpper int64 = f.maxChunkSize
 		lenght     int64 = 0
 	)
 
 	info := &FeedInfo{
-		CategoryID: feedCtx.params.CategoryID,
-		Scope:      feedCtx.params.Scope,
-		MarketID:   feedCtx.marketID,
+		CategoryID: params.CategoryID,
+		Scope:      params.Scope,
+		MarketID:   params.marketID,
+	}
+
+	endpointURL, err := url.Parse(f.baseURL + f.version + "/" + params.apiPath)
+	if err != nil {
+		return nil, fmt.Errorf("download(): cannot create endpoint URL: %v", err)
 	}
 
 	// We want to make at least one request
@@ -96,12 +108,14 @@ func (c *Client) download(feedCtx *feedContext, dst io.Writer) (*FeedInfo, error
 	// Loop until all chunks are completed
 	for responseStatus == http.StatusPartialContent {
 
-		rq, err := buildHTTPRequest(feedCtx, rangeLower, rangeUpper)
+		rq, err := buildHTTPRequest(endpointURL, params, rangeLower, rangeUpper)
 		if err != nil {
 			return nil, err
 		}
 
-		rs, err := c.httpClient.Do(rq)
+		rq.WithContext(ctx)
+
+		rs, err := f.httpClient.Do(rq)
 		if err != nil {
 			return nil, err
 		}
@@ -111,12 +125,12 @@ func (c *Client) download(feedCtx *feedContext, dst io.Writer) (*FeedInfo, error
 		if responseStatus == http.StatusOK || responseStatus == http.StatusPartialContent {
 			_, err := io.Copy(dst, rs.Body)
 			if err != nil {
-				return nil, fmt.Errorf("downloadFile(): impossible to copy response body")
+				return nil, fmt.Errorf("download(): impossible to copy response body")
 			}
 
 			rangeLower, rangeUpper, lenght, err = processContentRange(rs.Header.Get(headerContentRange))
 			rangeLower = rangeUpper + 1
-			rangeUpper = rangeUpper + c.maxChunkSize
+			rangeUpper = rangeUpper + f.maxChunkSize
 
 			info.LastModified = rs.Header.Get(headerLastModified)
 			info.Size = lenght
@@ -132,39 +146,23 @@ func (c *Client) download(feedCtx *feedContext, dst io.Writer) (*FeedInfo, error
 	return info, nil
 }
 
-// buildEndpointURL is an helper function to build the final endpoint URL including the query parameters
-func buildEndpointURL(feedCtx *feedContext) (string, error) {
-	u, err := feedCtx.baseURL.Parse(feedCtx.pathURL)
-	if err != nil {
-		return "", fmt.Errorf("buildEndpointURL(): cannot create endpoint URL: %v", err)
-	}
-
-	qs, err := query.Values(feedCtx.params)
-	if err != nil {
-		return "", fmt.Errorf("buildEndpointURL(): cannot parse query parameters: %v", err)
-	}
-
-	u.RawQuery = qs.Encode()
-	return u.String(), nil
-}
-
 // buildHTTPRequest is an helper function to build the Feed HTTP request
-func buildHTTPRequest(feedCtx *feedContext, rangeLower, rangeUpper int64) (*http.Request, error) {
+func buildHTTPRequest(endpointURL *url.URL, params *feedParams, rangeLower, rangeUpper int64) (*http.Request, error) {
 
-	endpointURL, err := buildEndpointURL(feedCtx)
+	qs, err := query.Values(params)
+	if err != nil {
+		return nil, fmt.Errorf("buildHTTPRequest(): cannot parse query parameters: %v", err)
+	}
+
+	endpointURL.RawQuery = qs.Encode()
+
+	rq, err := http.NewRequest("GET", endpointURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	rq, err := http.NewRequest("GET", endpointURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	rq.Header.Set(headerMarketplaceID, feedCtx.marketID)
+	rq.Header.Set(headerMarketplaceID, params.marketID)
 	rq.Header.Set(headerRange, fmt.Sprintf("bytes=%v-%v", rangeLower, rangeUpper))
-
-	rq.WithContext(feedCtx.ctx)
 
 	return rq, nil
 }

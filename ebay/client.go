@@ -12,12 +12,8 @@ type Client struct {
 	// baseURL is the base URL for API request. baseURL should always be
 	// specified with a trailing slash
 	baseURL *url.URL
-	// maxChunkSize is the max chunk size for donwload the feed files
-	maxChunkSize int64
 	// reuse a singl struct instead of allocating one for each service
 	common service
-	// Services used to access to the different part of eBay API
-	Feed *FeedService
 }
 
 type service struct {
@@ -28,14 +24,14 @@ type service struct {
 // The API methods require OAuth2 authentication, provide an HTTPClient that will
 // performe the authentication
 func NewSandboxClient(httpClient HTTPClient) (*Client, error) {
-	return newClient(sboxDefaultBaseURL, sboxDefaultMaxChunkSize, httpClient)
+	return newClient(defaultSandboxBaseURL, defaultSandboxMaxChunkSize, httpClient)
 }
 
 // NewProdClient creates a new eBay API client pointing to eBay Sandbox environment
 // The API methods require OAuth2 authentication, provide an HTTPClient that will
 // performe the authentication
 func NewProdClient(httpClient HTTPClient) (*Client, error) {
-	return newClient(prodDefaultBaseURL, prodDefaultMaxChunkSize, httpClient)
+	return newClient(defaultProdBaseURL, defaultProdMaxChunkSize, httpClient)
 }
 
 // newClient is helper function to create a new eBay API client
@@ -46,10 +42,9 @@ func newClient(baseURL string, maxChunkSize int64, httpClient HTTPClient) (*Clie
 
 	baseEndpoint, _ := url.Parse(baseURL)
 
-	c := &Client{httpClient: httpClient, baseURL: baseEndpoint, maxChunkSize: maxChunkSize}
+	c := &Client{httpClient: httpClient, baseURL: baseEndpoint}
 
 	c.common.client = c
-	c.Feed = (*FeedService)(&c.common)
 
 	return c, nil
 }

@@ -23,7 +23,7 @@ func Compare(a, b *ErrorResponse) bool {
 
 func Test_IsNewErrorResponse(t *testing.T) {
 
-	endpointURL, _ := url.Parse(sboxDefaultBaseURL)
+	endpointURL, _ := url.Parse(defaultSandboxBaseURL)
 
 	newHTTPResponse := func(status int, body string) *http.Response {
 		return &http.Response{
@@ -107,7 +107,7 @@ func Test_IsNewErrorResponse(t *testing.T) {
 
 func Test_IsErrorResponseToString(t *testing.T) {
 
-	endpointURL, _ := url.Parse(sboxDefaultBaseURL)
+	endpointURL, _ := url.Parse("https://api.sandbox.ebay.com/buy/feed/v1_beta/item")
 
 	httpReponseNotSupportedCategory := &http.Response{
 		Request: &http.Request{
@@ -133,5 +133,5 @@ func Test_IsErrorResponseToString(t *testing.T) {
 	}
 
 	assert.Error(t, errorResponseNotSupportedCategory,
-		"api error response - GET https://api.sandbox.ebay.com/buy/feed/v1_beta/: 400 - errors: [{13022 API_BROWSE REQUEST The 'category_id' 200 submitted is not supported. The 'category_id' 200 submitted is not supported. [{categoryId 200}]}] - warning: []")
+		"api error response - GET https://api.sandbox.ebay.com/buy/feed/v1_beta/item: 400 - errors: [{13022 API_BROWSE REQUEST The 'category_id' 200 submitted is not supported. The 'category_id' 200 submitted is not supported. [{categoryId 200}]}] - warning: []")
 }
