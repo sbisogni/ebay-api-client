@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	// DefaultAPIVersion is the default API version
+	// DefaultAPIVersion is the default Feed API version
 	DefaultAPIVersion string = "v1_beta"
 
 	// defaultSandboxBaseURL is the default base url for the Feed API in the sandbox environment
