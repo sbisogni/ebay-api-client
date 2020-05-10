@@ -323,7 +323,9 @@ func Test_IsWeeklyItemBoostrapReturningErrorReponse(t *testing.T) {
 	buffer := new(bytes.Buffer)
 	_, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
 
-	assert.Error(t, err, "api error response - GET https://api.sandbox.ebay.com/buy/feed/v1_beta/item: 400 - errors: [{13022 API_BROWSE REQUEST The 'category_id' 200 submitted is not supported. The 'category_id' 200 submitted is not supported. [{categoryId 200}]}] - warning: []")
+	assert.Error(t, err, "API Error\nGET https://api.sandbox.ebay.com/buy/feed/v1_beta/item HTTP/1.1\nHost: api.sandbox.ebay.com\nRespose Code: 400\n"+
+		"Erros: [{ErrorID:13022 Domain:API_BROWSE Category:REQUEST Message:The 'category_id' 200 submitted is not supported. LongMessage:The 'category_id' 200 submitted is not supported. "+
+		"Parameters:[{Name:categoryId Value:200}]}]\nWarnings: []")
 }
 
 func Test_IsWeeklyItemBoostrapSizeZeroIfNoContentFound(t *testing.T) {

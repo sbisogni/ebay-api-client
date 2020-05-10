@@ -49,7 +49,7 @@ func Test_IsNewErrorResponse(t *testing.T) {
 
 	errorResponseNotSupportedCategory := ErrorResponse{
 		Response: httpReponseNotSupportedCategory,
-		Message:  "api error response",
+		Message:  "API Error",
 		Errors: []ErrorData{
 			{
 				ErrorID:     13022,
@@ -113,13 +113,19 @@ func Test_IsErrorResponseToString(t *testing.T) {
 		Request: &http.Request{
 			Method: "GET",
 			URL:    endpointURL,
+			Proto:  "HTTP/1.1",
+			Host:   "api.sandbox.ebay.com",
+			Header: make(http.Header),
 		},
 		StatusCode: http.StatusBadRequest,
 	}
 
+	httpReponseNotSupportedCategory.Request.Header.Set(headerMarketplaceID, "EBAY_US")
+	httpReponseNotSupportedCategory.Request.Header.Set("Content-Type", "application/json")
+
 	errorResponseNotSupportedCategory := &ErrorResponse{
 		Response: httpReponseNotSupportedCategory,
-		Message:  "api error response",
+		Message:  "API Error",
 		Errors: []ErrorData{
 			{
 				ErrorID:     13022,
@@ -133,5 +139,35 @@ func Test_IsErrorResponseToString(t *testing.T) {
 	}
 
 	assert.Error(t, errorResponseNotSupportedCategory,
-		"api error response - GET https://api.sandbox.ebay.com/buy/feed/v1_beta/item: 400 - errors: [{13022 API_BROWSE REQUEST The 'category_id' 200 submitted is not supported. The 'category_id' 200 submitted is not supported. [{categoryId 200}]}] - warning: []")
+		"API Error\nGET https://api.sandbox.ebay.com/buy/feed/v1_beta/item HTTP/1.1\nHost: api.sandbox.ebay.com\n"+
+			"X-Ebay-C-Marketplace-Id: EBAY_US\nContent-Type: application/json\nRespose Code: 400\n"+
+			"Erros: [{ErrorID:13022 Domain:API_BROWSE Category:REQUEST Message:The 'category_id' 200 submitted is not supported. "+
+			"LongMessage:The 'category_id' 200 submitted is not supported. Parameters:[{Name:categoryId Value:200}]}]\nWarnings: []")
+}
+
+func Test_IsErrorResponseToStringWhenHTTPRequestIsNil(t *testing.T) {
+
+	httpReponseNotSupportedCategory := &http.Response{
+		StatusCode: http.StatusBadRequest,
+	}
+
+	errorResponseNotSupportedCategory := &ErrorResponse{
+		Response: httpReponseNotSupportedCategory,
+		Message:  "API Error",
+		Errors: []ErrorData{
+			{
+				ErrorID:     13022,
+				Domain:      "API_BROWSE",
+				Category:    "REQUEST",
+				Message:     "The 'category_id' 200 submitted is not supported.",
+				LongMessage: "The 'category_id' 200 submitted is not supported.",
+				Parameters:  []ErrorDataParam{{Name: "categoryId", Value: "200"}},
+			},
+		},
+	}
+
+	assert.Error(t, errorResponseNotSupportedCategory,
+		"API Error\nHTTP Request is <nil>\nRespose Code: 400\n"+
+			"Erros: [{ErrorID:13022 Domain:API_BROWSE Category:REQUEST Message:The 'category_id' 200 submitted is not supported. "+
+			"LongMessage:The 'category_id' 200 submitted is not supported. Parameters:[{Name:categoryId Value:200}]}]\nWarnings: []")
 }
