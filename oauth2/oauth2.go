@@ -12,16 +12,6 @@ import (
 )
 
 const (
-
-	// DefaultAPIVersion is the default oAuth2 API version
-	DefaultAPIVersion string = "v1"
-
-	defaultSandboxBaseURL string = ""
-	defaultProdBaseURL    string = "https://api.ebay.com/identity/"
-
-	// Token API
-	pathOAuth2Token string = "oauth2/token"
-
 	// APIClientID is the os variable name storing the eBay oAuth2 client id
 	APIClientID string = "EBAY_API_CLIENT_ID"
 	// APIClientSecret is the os variable name storing the eBay oAuth2 client secret
@@ -69,6 +59,60 @@ func NewClientCredentialsClient(ctx context.Context, tokenURL string, scopes []s
 	if clientSecret == "" {
 		return nil, fmt.Errorf("Environment variable %v is not set", APIClientSecret)
 	}
-	conf := clientcredentials.Config{ClientID: clientID, ClientSecret: clientSecret, Scopes: scopes, TokenURL: tokenURL}
-	return conf.Client(ctx), nil
+
+	ts := newTokenSource(ctx, &clientcredentials.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Scopes:       scopes,
+		TokenURL:     tokenURL,
+		AuthStyle:    oauth2.AuthStyleInHeader,
+	})
+
+	return &http.Client{
+		Transport: &oauth2.Transport{
+			Base:   contextClient(ctx).Transport,
+			Source: ts,
+		},
+	}, nil
+}
+
+// newTokenSource creates a wrapper for the oauth2 client credentials TokenSource which is used to force the token_type value to "bearer"
+// The issue is that eBay OAuth2 API returns "Application Access Token" as token_type of the access token instead of "bearer".
+// The value is set in outh2.Token.TokenType field which is then used to define how to forge the Authentication Header field in the API request.
+// eBay API respondes with "1003 OAuth REQUEST Token type in the Authorization header is invalid"
+func newTokenSource(ctx context.Context, conf *clientcredentials.Config) oauth2.TokenSource {
+	source := &tokenSource{
+		ctx:  ctx,
+		conf: conf,
+		orig: conf.TokenSource(ctx),
+	}
+	return source
+}
+
+type tokenSource struct {
+	ctx  context.Context
+	conf *clientcredentials.Config
+	orig oauth2.TokenSource
+}
+
+func (t *tokenSource) Token() (*oauth2.Token, error) {
+	tk, err := t.orig.Token()
+	if err != nil {
+		return tk, err
+	}
+
+	// Forcing the TokenType to bearer
+	tk.TokenType = "bearer"
+	return tk, err
+}
+
+// Maintaining compatibility with standard oauth2.internal.transport implementation
+func contextClient(ctx context.Context) *http.Client {
+	if ctx != nil {
+		if hc, ok := ctx.Value(oauth2.HTTPClient).(*http.Client); ok {
+			return hc
+		}
+	}
+
+	return http.DefaultClient
 }
