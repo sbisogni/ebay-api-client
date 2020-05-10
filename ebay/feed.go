@@ -49,6 +49,26 @@ type FeedService struct {
 	maxChunkSize int64
 }
 
+// NewSandboxFeedService creates a new FeedService client pointing to eBay Sandbox environment.
+func NewSandboxFeedService(httpClient HTTPClient) *FeedService {
+	return &FeedService{
+		httpClient:   httpClient,
+		baseURL:      defaultSandboxBaseURL,
+		version:      DefaultAPIVersion,
+		maxChunkSize: defaultSandboxMaxChunkSize,
+	}
+}
+
+// NewProdFeedService creates a new FeedService client pointing to eBay Production environment.
+func NewProdFeedService(httpClient HTTPClient) *FeedService {
+	return &FeedService{
+		httpClient:   httpClient,
+		baseURL:      defaultProdBaseURL,
+		version:      DefaultAPIVersion,
+		maxChunkSize: defaultProdMaxChunkSize,
+	}
+}
+
 // FeedInfo containts information about the feed when the download is successful
 // In case not content is found for the given feed criteria, the size will be zero
 type FeedInfo struct {

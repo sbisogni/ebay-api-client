@@ -52,13 +52,24 @@ func newHTTPResponse(statusCode int, rangeLower, rangeUpper, lenght int64, lastM
 	return rs
 }
 
-func NewFeedService(httpClient HTTPClient) *FeedService {
-	return &FeedService{
-		httpClient:   httpClient,
-		baseURL:      defaultSandboxBaseURL,
-		version:      DefaultAPIVersion,
-		maxChunkSize: defaultSandboxMaxChunkSize,
-	}
+func Test_NewSandboxFeedService(t *testing.T) {
+	expHTTPClient := http.DefaultClient
+	s := NewSandboxFeedService(expHTTPClient)
+
+	assert.Assert(t, s.httpClient == expHTTPClient)
+	assert.Assert(t, s.baseURL == defaultSandboxBaseURL)
+	assert.Assert(t, s.version == DefaultAPIVersion)
+	assert.Assert(t, s.maxChunkSize == defaultSandboxMaxChunkSize)
+}
+
+func Test_NewProdFeedService(t *testing.T) {
+	expHTTPClient := http.DefaultClient
+	s := NewProdFeedService(expHTTPClient)
+
+	assert.Assert(t, s.httpClient == expHTTPClient)
+	assert.Assert(t, s.baseURL == defaultProdBaseURL)
+	assert.Assert(t, s.version == DefaultAPIVersion)
+	assert.Assert(t, s.maxChunkSize == defaultProdMaxChunkSize)
 }
 
 func Test_processContentRange(t *testing.T) {
@@ -221,7 +232,7 @@ func Test_IsWeeklyItemBoostrapPrecessingThreeChunks(t *testing.T) {
 		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
-	client := NewFeedService(m)
+	client := NewSandboxFeedService(m)
 
 	buffer := new(bytes.Buffer)
 	info, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
@@ -260,7 +271,7 @@ func Test_IsWeeklyItemBoostrapPrecessingOneChunk(t *testing.T) {
 		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
-	client := NewFeedService(m)
+	client := NewSandboxFeedService(m)
 
 	buffer := new(bytes.Buffer)
 	info, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
@@ -307,7 +318,7 @@ func Test_IsWeeklyItemBoostrapReturningErrorReponse(t *testing.T) {
 		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusBadRequest, rangeLower, rangeHigher, expLenght, expLastModified, expErrorResponse), nil)
 
-	client := NewFeedService(m)
+	client := NewSandboxFeedService(m)
 
 	buffer := new(bytes.Buffer)
 	_, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
@@ -338,7 +349,7 @@ func Test_IsWeeklyItemBoostrapSizeZeroIfNoContentFound(t *testing.T) {
 		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusNoContent, 0, 0, 0, "", ""), nil)
 
-	client := NewFeedService(m)
+	client := NewSandboxFeedService(m)
 
 	buffer := new(bytes.Buffer)
 	info, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
@@ -373,7 +384,7 @@ func Test_IsWeeklyItemBoostrapReturningErrorIfHTTPError(t *testing.T) {
 		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
 		Return(nil, fmt.Errorf("HTTP Error"))
 
-	client := NewFeedService(m)
+	client := NewSandboxFeedService(m)
 
 	buffer := new(bytes.Buffer)
 	_, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
