@@ -89,7 +89,8 @@ type FeedInfo struct {
 }
 
 // WeeklyItemBoostrap downloads the latest weekly item boostrap file for the given eBay market id and category id.
-// The file is written into the given destination which has to implement the io.Writer interface.
+// The feed is written into the given destination which has to implement the io.Writer interface. The feed is encodedd in
+// Tab Separated Value (TSV) format and gzip compressed: it is required to gunzip the feed before reading it.
 // The function returns a FeedInfo object encoding the information abouth the downloaded file. The Size field will be set to zero,
 // in the case, no boostrap file could be foud for the given market id and category id.
 // https://developer.ebay.com/api-docs/buy/feed/resources/item/methods/getItemFeed
