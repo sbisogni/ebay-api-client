@@ -16,15 +16,15 @@ const (
 	// DefaultAPIVersion is the default Feed API version
 	DefaultAPIVersion string = "v1_beta"
 
-	// defaultSandboxBaseURL is the default base url for the Feed API in the sandbox environment
-	defaultSandboxBaseURL string = "https://api.sandbox.ebay.com/buy/feed/"
-	// defaultSandboxMaxChunkSize is the default max chunk size supported in the sandbox environment
-	defaultSandboxMaxChunkSize int64 = 1048576
+	// DefaultSandboxBaseURL is the default base url for the Feed API in the sandbox environment
+	DefaultSandboxBaseURL string = "https://api.sandbox.ebay.com/buy/feed/"
+	// DefaultSandboxMaxChunkSize is the default max chunk size supported in the sandbox environment
+	DefaultSandboxMaxChunkSize int64 = 1048576
 
-	// defaultProdBaseURL is the default base url for the Feed API in the production environment
-	defaultProdBaseURL string = "https://api.ebay.com/buy/feed/"
-	// defaultProdMaxChunkSize is the default max chunk size supported in the production environment
-	defaultProdMaxChunkSize int64 = 10485760
+	// DefaultProdBaseURL is the default base url for the Feed API in the production environment
+	DefaultProdBaseURL string = "https://api.ebay.com/buy/feed/"
+	// DefaultProdMaxChunkSize is the default max chunk size supported in the production environment
+	DefaultProdMaxChunkSize int64 = 10485760
 
 	//  Feed API Path
 	pathGetItem string = "item"
@@ -43,29 +43,33 @@ const (
 // FeedService handles the communication with eBay Feed API
 // https://developer.ebay.com/api-docs/buy/feed/overview.html
 type FeedService struct {
-	httpClient   HTTPClient
-	baseURL      string
-	version      string
-	maxChunkSize int64
+	// HTTPClient is the HTTP client instance
+	HTTPClient HTTPClient
+	// BaseURL is the Feed API base URL
+	BaseURL string
+	// Version is the API version to use
+	Version string
+	// ChunkSize is the size of the chunk used to download the file. Refers to DefaultProdMaxChunkSize and DefaultSandboxMaxChunkSize
+	ChunkSize int64
 }
 
 // NewSandboxFeedService creates a new FeedService client pointing to eBay Sandbox environment.
 func NewSandboxFeedService(httpClient HTTPClient) *FeedService {
 	return &FeedService{
-		httpClient:   httpClient,
-		baseURL:      defaultSandboxBaseURL,
-		version:      DefaultAPIVersion,
-		maxChunkSize: defaultSandboxMaxChunkSize,
+		HTTPClient: httpClient,
+		BaseURL:    DefaultSandboxBaseURL,
+		Version:    DefaultAPIVersion,
+		ChunkSize:  DefaultSandboxMaxChunkSize,
 	}
 }
 
 // NewProdFeedService creates a new FeedService client pointing to eBay Production environment.
 func NewProdFeedService(httpClient HTTPClient) *FeedService {
 	return &FeedService{
-		httpClient:   httpClient,
-		baseURL:      defaultProdBaseURL,
-		version:      DefaultAPIVersion,
-		maxChunkSize: defaultProdMaxChunkSize,
+		HTTPClient: httpClient,
+		BaseURL:    DefaultProdBaseURL,
+		Version:    DefaultAPIVersion,
+		ChunkSize:  DefaultProdMaxChunkSize,
 	}
 }
 
@@ -108,8 +112,8 @@ func (f *FeedService) download(ctx context.Context, params *feedParams, dst io.W
 
 	var (
 		rangeLower int64 = 0
-		rangeUpper int64 = f.maxChunkSize
-		lenght     int64 = 0
+		rangeUpper int64 = f.ChunkSize
+		lenght     int64 = f.ChunkSize
 	)
 
 	info := &FeedInfo{
@@ -118,15 +122,15 @@ func (f *FeedService) download(ctx context.Context, params *feedParams, dst io.W
 		MarketID:   params.marketID,
 	}
 
-	endpointURL, err := url.Parse(f.baseURL + f.version + "/" + params.apiPath)
+	endpointURL, err := url.Parse(f.BaseURL + f.Version + "/" + params.apiPath)
 	if err != nil {
 		return nil, fmt.Errorf("download(): cannot create endpoint URL: %v", err)
 	}
 
-	// We want to make at least one request
 	responseStatus := http.StatusPartialContent
+
 	// Loop until all chunks are completed
-	for responseStatus == http.StatusPartialContent {
+	for responseStatus == http.StatusPartialContent && rangeLower < lenght {
 
 		rq, err := buildHTTPRequest(endpointURL, params, rangeLower, rangeUpper)
 		if err != nil {
@@ -135,7 +139,7 @@ func (f *FeedService) download(ctx context.Context, params *feedParams, dst io.W
 
 		rq.WithContext(ctx)
 
-		rs, err := f.httpClient.Do(rq)
+		rs, err := f.HTTPClient.Do(rq)
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +154,7 @@ func (f *FeedService) download(ctx context.Context, params *feedParams, dst io.W
 
 			rangeLower, rangeUpper, lenght, err = processContentRange(rs.Header.Get(headerContentRange))
 			rangeLower = rangeUpper + 1
-			rangeUpper = rangeUpper + f.maxChunkSize
+			rangeUpper = rangeUpper + f.ChunkSize
 
 			info.LastModified = rs.Header.Get(headerLastModified)
 			info.Size = lenght

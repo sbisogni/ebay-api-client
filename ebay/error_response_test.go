@@ -23,7 +23,7 @@ func Compare(a, b *ErrorResponse) bool {
 
 func Test_IsNewErrorResponse(t *testing.T) {
 
-	endpointURL, _ := url.Parse(defaultSandboxBaseURL)
+	endpointURL, _ := url.Parse(DefaultSandboxBaseURL)
 
 	newHTTPResponse := func(status int, body string) *http.Response {
 		return &http.Response{

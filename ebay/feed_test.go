@@ -42,7 +42,7 @@ func newHTTPResponse(statusCode int, rangeLower, rangeUpper, lenght int64, lastM
 	rs.Header.Set(headerContentRange, fmt.Sprintf("%v-%v/%v", rangeLower, rangeUpper, lenght))
 	rs.Header.Set(headerLastModified, lastModified)
 
-	u, _ := url.Parse(defaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem)
+	u, _ := url.Parse(DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem)
 	rq, _ := http.NewRequest("GET", u.String(), nil)
 
 	rs.Request = rq
@@ -56,20 +56,20 @@ func Test_NewSandboxFeedService(t *testing.T) {
 	expHTTPClient := http.DefaultClient
 	s := NewSandboxFeedService(expHTTPClient)
 
-	assert.Assert(t, s.httpClient == expHTTPClient)
-	assert.Assert(t, s.baseURL == defaultSandboxBaseURL)
-	assert.Assert(t, s.version == DefaultAPIVersion)
-	assert.Assert(t, s.maxChunkSize == defaultSandboxMaxChunkSize)
+	assert.Assert(t, s.HTTPClient == expHTTPClient)
+	assert.Assert(t, s.BaseURL == DefaultSandboxBaseURL)
+	assert.Assert(t, s.Version == DefaultAPIVersion)
+	assert.Assert(t, s.ChunkSize == DefaultSandboxMaxChunkSize)
 }
 
 func Test_NewProdFeedService(t *testing.T) {
 	expHTTPClient := http.DefaultClient
 	s := NewProdFeedService(expHTTPClient)
 
-	assert.Assert(t, s.httpClient == expHTTPClient)
-	assert.Assert(t, s.baseURL == defaultProdBaseURL)
-	assert.Assert(t, s.version == DefaultAPIVersion)
-	assert.Assert(t, s.maxChunkSize == defaultProdMaxChunkSize)
+	assert.Assert(t, s.HTTPClient == expHTTPClient)
+	assert.Assert(t, s.BaseURL == DefaultProdBaseURL)
+	assert.Assert(t, s.Version == DefaultAPIVersion)
+	assert.Assert(t, s.ChunkSize == DefaultProdMaxChunkSize)
 }
 
 func Test_processContentRange(t *testing.T) {
@@ -152,7 +152,7 @@ func Test_buildHTTPRequest(t *testing.T) {
 		expEndpointURL *url.URL
 	)
 
-	expEndpointURL, _ = url.Parse(defaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem)
+	expEndpointURL, _ = url.Parse(DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem)
 
 	type args struct {
 		endpointURL *url.URL
@@ -198,10 +198,11 @@ func Test_IsWeeklyItemBoostrapPrecessingThreeChunks(t *testing.T) {
 	var (
 		expMarketID     string = "EBAY_US"
 		expCategoryID   string = "1"
-		expLenght       int64  = 2000
+		expLenght       int64  = 36
 		expBodyChunk    string = "Hello World!"
 		expLastModified string = " Wed, 21 Oct 2015 07:28:00 GMT"
-		expEndpointURL  string = defaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
+		expEndpointURL  string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
+		maxChunkSize    int64  = 12
 	)
 
 	ctrl := gomock.NewController(t)
@@ -211,7 +212,7 @@ func Test_IsWeeklyItemBoostrapPrecessingThreeChunks(t *testing.T) {
 
 	var (
 		rangeLower  int64 = 0
-		rangeHigher int64 = defaultSandboxMaxChunkSize
+		rangeHigher int64 = maxChunkSize
 	)
 
 	m.EXPECT().
@@ -219,20 +220,21 @@ func Test_IsWeeklyItemBoostrapPrecessingThreeChunks(t *testing.T) {
 		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	rangeLower = rangeHigher + 1
-	rangeHigher = rangeHigher + defaultSandboxMaxChunkSize
+	rangeHigher = rangeHigher + maxChunkSize
 
 	m.EXPECT().
 		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	rangeLower = rangeHigher + 1
-	rangeHigher = rangeHigher + defaultSandboxMaxChunkSize
+	rangeHigher = rangeHigher + maxChunkSize
 
 	m.EXPECT().
 		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
-		Return(newHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
+		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	client := NewSandboxFeedService(m)
+	client.ChunkSize = maxChunkSize
 
 	buffer := new(bytes.Buffer)
 	info, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
@@ -254,7 +256,7 @@ func Test_IsWeeklyItemBoostrapPrecessingOneChunk(t *testing.T) {
 		expLenght       int64  = 2000
 		expBodyChunk    string = "Hello World!"
 		expLastModified string = "Wed, 21 Oct 2015 07:28:00 GMT"
-		expEndpointURL  string = defaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
+		expEndpointURL  string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
 	)
 
 	ctrl := gomock.NewController(t)
@@ -264,7 +266,7 @@ func Test_IsWeeklyItemBoostrapPrecessingOneChunk(t *testing.T) {
 
 	var (
 		rangeLower  int64 = 0
-		rangeHigher int64 = defaultSandboxMaxChunkSize
+		rangeHigher int64 = DefaultSandboxMaxChunkSize
 	)
 
 	m.EXPECT().
@@ -292,7 +294,7 @@ func Test_IsWeeklyItemBoostrapReturningErrorReponse(t *testing.T) {
 		expCategoryID    string = "1"
 		expLenght        int64  = 2000
 		expLastModified  string = "Wed, 21 Oct 2015 07:28:00 GMT"
-		expEndpointURL   string = defaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
+		expEndpointURL   string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
 		expErrorResponse string = `{
 		"errors": [{
 			"errorId": 13022,
@@ -311,7 +313,7 @@ func Test_IsWeeklyItemBoostrapReturningErrorReponse(t *testing.T) {
 
 	var (
 		rangeLower  int64 = 0
-		rangeHigher int64 = defaultSandboxMaxChunkSize
+		rangeHigher int64 = DefaultSandboxMaxChunkSize
 	)
 
 	m.EXPECT().
@@ -334,7 +336,7 @@ func Test_IsWeeklyItemBoostrapSizeZeroIfNoContentFound(t *testing.T) {
 		expMarketID    string = "EBAY_US"
 		expCategoryID  string = "1"
 		expLenght      int64  = 0
-		expEndpointURL string = defaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
+		expEndpointURL string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
 	)
 
 	ctrl := gomock.NewController(t)
@@ -344,7 +346,7 @@ func Test_IsWeeklyItemBoostrapSizeZeroIfNoContentFound(t *testing.T) {
 
 	var (
 		rangeLower  int64 = 0
-		rangeHigher int64 = defaultSandboxMaxChunkSize
+		rangeHigher int64 = DefaultSandboxMaxChunkSize
 	)
 
 	m.EXPECT().
@@ -369,7 +371,7 @@ func Test_IsWeeklyItemBoostrapReturningErrorIfHTTPError(t *testing.T) {
 	var (
 		expMarketID    string = "EBAY_US"
 		expCategoryID  string = "1"
-		expEndpointURL string = defaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
+		expEndpointURL string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
 	)
 
 	ctrl := gomock.NewController(t)
@@ -379,7 +381,7 @@ func Test_IsWeeklyItemBoostrapReturningErrorIfHTTPError(t *testing.T) {
 
 	var (
 		rangeLower  int64 = 0
-		rangeHigher int64 = defaultSandboxMaxChunkSize
+		rangeHigher int64 = DefaultSandboxMaxChunkSize
 	)
 
 	m.EXPECT().
