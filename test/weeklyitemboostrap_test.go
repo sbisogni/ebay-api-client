@@ -14,7 +14,7 @@ import (
 
 func Test_WeekItemBoostrap(t *testing.T) {
 
-	filename := "feed.tzv.gz"
+	filename := "feed.tsv.gz"
 
 	ctx := context.Background()
 	httpClient, err := oauth2.NewSandboxClientCredentialsClient(ctx, []string{oauth2.ScopeBuyFeedAPI})
