@@ -49,7 +49,7 @@ func Test_IsNewErrorResponse(t *testing.T) {
 
 	errorResponseNotSupportedCategory := ErrorResponse{
 		Response: httpReponseNotSupportedCategory,
-		Message:  "API Error",
+		Message:  apiError,
 		Errors: []ErrorData{
 			{
 				ErrorID:     13022,
@@ -62,11 +62,18 @@ func Test_IsNewErrorResponse(t *testing.T) {
 		},
 	}
 
-	httpReponseInvalidJSONBody := newHTTPResponse(http.StatusBadRequest, "this is not a json body")
+	httpResponseInvalidJSONBody := newHTTPResponse(http.StatusBadRequest, "this is not a json body")
 
 	errorResponseInvalidJSONBody := ErrorResponse{
-		Response: httpReponseInvalidJSONBody,
+		Response: httpResponseInvalidJSONBody,
 		Message:  "this is not a json body",
+	}
+
+	httpResponseNoContent := newHTTPResponse(http.StatusNoContent, "")
+
+	errorResponseNoContent := ErrorResponse{
+		Response: httpResponseNoContent,
+		Message:  noContentError,
 	}
 
 	tests := []struct {
@@ -76,14 +83,19 @@ func Test_IsNewErrorResponse(t *testing.T) {
 	}{
 
 		{
-			name: "is nil returned if error code is 200",
+			name: "is nil returned if response status 200",
 			args: newHTTPResponse(http.StatusOK, ""),
 			want: nil,
 		},
 		{
-			name: "is nil returned if error code is 299",
+			name: "is nil returned if response status 299",
 			args: newHTTPResponse(http.StatusOK, ""),
 			want: nil,
+		},
+		{
+			name: "is ErrorResponse when response status is 204",
+			args: httpResponseNoContent,
+			want: &errorResponseNoContent,
 		},
 		{
 			name: "is ErrorResponse inizialized from json body",
@@ -92,7 +104,7 @@ func Test_IsNewErrorResponse(t *testing.T) {
 		},
 		{
 			name: "is ErrorResponse.Message set if body is invalid json",
-			args: httpReponseInvalidJSONBody,
+			args: httpResponseInvalidJSONBody,
 			want: &errorResponseInvalidJSONBody,
 		},
 	}
@@ -125,7 +137,7 @@ func Test_IsErrorResponseToString(t *testing.T) {
 
 	errorResponseNotSupportedCategory := &ErrorResponse{
 		Response: httpReponseNotSupportedCategory,
-		Message:  "API Error",
+		Message:  apiError,
 		Errors: []ErrorData{
 			{
 				ErrorID:     13022,
