@@ -3,12 +3,14 @@
 [] Uset httptest instead of HTTPClient mock in unittest 
 [] Rename package to Buyer. We will have one package for each API domain (buyer)
 [] Implement API to retrieve all categories
+[] Implement feed filters function
 [] Make Sanbox vs Production configuration depending on configuration file
-[] Manager gzip stream
+[] Parallelize download function
 
 **DONE**
 [X] Feed: move from Client to FeedService
 [X] Create oAuth2 management objects
 [X] Create end to end test for the WeeklyItemBostrap 
+[X] Manager gzip stream
 
 
