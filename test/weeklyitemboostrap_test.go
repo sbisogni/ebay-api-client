@@ -21,7 +21,7 @@ func Test_WeekItemBoostrap(t *testing.T) {
 	assert.NilError(t, err)
 
 	feedClient := ebay.NewSandboxFeedService(httpClient)
-	//feedClient.ChunkSize = 1816
+	feedClient.ChunkSize = 1816
 
 	feed, err := os.Create(filename)
 	assert.NilError(t, err)
@@ -39,8 +39,6 @@ func Test_WeekItemBoostrap(t *testing.T) {
 
 	gunzip, err := gzip.NewReader(feed)
 	assert.NilError(t, err)
-
-	gunzip.Multistream(false)
 
 	b, err := ioutil.ReadAll(gunzip)
 	assert.NilError(t, err)
