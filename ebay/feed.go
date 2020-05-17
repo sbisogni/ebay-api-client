@@ -148,9 +148,9 @@ func (f *FeedService) download(ctx context.Context, params *feedParams, dst io.W
 		responseStatus = rs.StatusCode
 
 		if responseStatus == http.StatusOK || responseStatus == http.StatusPartialContent {
-			_, err := io.Copy(dst, rs.Body)
+			_, err = io.Copy(dst, rs.Body)
 			if err != nil {
-				return nil, fmt.Errorf("download(): impossible to copy response body")
+				return nil, fmt.Errorf("download(): impossible to copy response body: %v", err)
 			}
 
 			rangeLower, rangeUpper, lenght, err = processContentRange(rs.Header.Get(headerContentRange))
