@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/go-querystring/query"
 )
@@ -32,6 +33,8 @@ const (
 	// Feed API Parameters
 	scopeNewlyListed string = "NEWLY_LISTED"
 	scopeAllActive   string = "ALL_ACTIVE"
+
+	dateFormat string = "20060102"
 
 	// Header
 	headerRange         string = "Range"
@@ -83,19 +86,28 @@ type FeedInfo struct {
 	// Scope is the scope of the feed
 	Scope string
 	// LastModified is generated date of the feed
-	LastModified string
+	LastModified time.Time
 	// Size is the size of the feed file.
 	Size int64
 }
 
-// WeeklyItemBoostrap downloads the latest weekly item boostrap file for the given eBay market id and category id.
+// WeeklyItemBoostrap downloads the latest weekly item boostrap feed for the given eBay market id and category id.
 // The feed is written into the given destination which has to implement the io.Writer interface. The feed is encodedd in
 // Tab Separated Value (TSV) format and gzip compressed: it is required to gunzip the feed before reading it.
-// The function returns a FeedInfo object encoding the information abouth the downloaded file. The Size field will be set to zero,
-// in the case, no boostrap file could be foud for the given market id and category id.
+// The function returns a FeedInfo object encoding the information abouth the downloaded file.
 // https://developer.ebay.com/api-docs/buy/feed/resources/item/methods/getItemFeed
 func (f *FeedService) WeeklyItemBoostrap(ctx context.Context, marketID, categoryID string, dst io.Writer) (*FeedInfo, error) {
 	params := &feedParams{Scope: scopeAllActive, CategoryID: categoryID, marketID: marketID, apiPath: pathGetItem}
+	return f.download(ctx, params, dst)
+}
+
+// DailyNewlyItems downloads the feed containing all the newly listed items for the given eBay market id, category id and date
+// The feed is written into the given destination which has to implement the io.Writer interface. The feed is encodedd in
+// Tab Separated Value (TSV) format and gzip compressed: it is required to gunzip the feed before reading it.
+// The function returns a FeedInfo object encoding the information abouth the downloaded file.
+// https://developer.ebay.com/api-docs/buy/feed/resources/item/methods/getItemFeed
+func (f *FeedService) DailyNewlyItems(ctx context.Context, marketID, categoryID string, date time.Time, dst io.Writer) (*FeedInfo, error) {
+	params := &feedParams{Scope: scopeNewlyListed, CategoryID: categoryID, marketID: marketID, Date: date.Format(dateFormat), apiPath: pathGetItem}
 	return f.download(ctx, params, dst)
 }
 
@@ -112,9 +124,10 @@ type feedParams struct {
 func (f *FeedService) download(ctx context.Context, params *feedParams, dst io.Writer) (*FeedInfo, error) {
 
 	var (
-		rangeLower int64 = 0
-		rangeUpper int64 = f.ChunkSize
-		lenght     int64 = f.ChunkSize
+		rangeLower   int64  = 0
+		rangeUpper   int64  = f.ChunkSize
+		lenght       int64  = f.ChunkSize
+		lastModified string = ""
 	)
 
 	info := &FeedInfo{
@@ -157,12 +170,16 @@ func (f *FeedService) download(ctx context.Context, params *feedParams, dst io.W
 			rangeLower = rangeUpper + 1
 			rangeUpper = rangeUpper + f.ChunkSize
 
-			info.LastModified = rs.Header.Get(headerLastModified)
-			info.Size = lenght
-		} else if responseStatus == http.StatusNoContent {
-			info.Size = 0
+			lastModified = rs.Header.Get(headerLastModified)
+
 		} else {
 			return nil, NewErrorResponse(rs)
+		}
+
+		info.Size = lenght
+		info.LastModified, err = time.Parse(time.RFC1123, lastModified)
+		if err != nil {
+			return nil, fmt.Errorf("download(): cannot read lastModified: %v", err)
 		}
 
 		rs.Body.Close()

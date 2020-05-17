@@ -11,17 +11,18 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/google/go-querystring/query"
 	"gotest.tools/v3/assert"
 )
 
-func newHTTPRequest(rangeLower, rangeUpper int64, categoryID, marketID, endpointURL string) *http.Request {
+func newHTTPRequest(rangeLower, rangeUpper int64, scope, categoryID, marketID, date, endpointURL string) *http.Request {
 
 	u, _ := url.Parse(endpointURL)
 	q, _ := query.Values(feedParams{
-		Scope: scopeAllActive, CategoryID: categoryID})
+		Scope: scope, CategoryID: categoryID, Date: date})
 
 	u.RawQuery = q.Encode()
 
@@ -149,10 +150,10 @@ func Test_buildHTTPRequest(t *testing.T) {
 		expScope       string = scopeAllActive
 		expRangeLower  int64  = 0
 		expRangeUpper  int64  = 1000
-		expEndpointURL *url.URL
+		expEndpointURL string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
 	)
 
-	expEndpointURL, _ = url.Parse(DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem)
+	endpointURL, _ := url.Parse(expEndpointURL)
 
 	type args struct {
 		endpointURL *url.URL
@@ -170,12 +171,12 @@ func Test_buildHTTPRequest(t *testing.T) {
 		{
 			name: "Is feed http  created?",
 			args: args{
-				endpointURL: expEndpointURL,
+				endpointURL: endpointURL,
 				params:      &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID},
 				rangeLower:  expRangeLower,
 				rangeUpper:  expRangeUpper,
 			},
-			want:    newHTTPRequest(expRangeLower, expRangeUpper, expCategoryID, expMarketID, "https://api.sandbox.ebay.com/buy/feed/v1_beta/item?category_id=1&feed_scope=ALL_ACTIVE"),
+			want:    newHTTPRequest(expRangeLower, expRangeUpper, expScope, expCategoryID, expMarketID, "", expEndpointURL),
 			wantErr: false,
 		},
 	}
@@ -193,14 +194,15 @@ func Test_buildHTTPRequest(t *testing.T) {
 	}
 }
 
-func Test_IsWeeklyItemBoostrapPrecessingThreeChunks(t *testing.T) {
+func Test_IsDownloadThreeChunks(t *testing.T) {
 
 	var (
 		expMarketID     string = "EBAY_US"
 		expCategoryID   string = "1"
+		expScope        string = scopeAllActive
 		expLenght       int64  = 36
 		expBodyChunk    string = "Hello World!"
-		expLastModified string = " Wed, 21 Oct 2015 07:28:00 GMT"
+		expLastModified string = "Wed, 21 Oct 2015 07:28:00 GMT"
 		expEndpointURL  string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
 		maxChunkSize    int64  = 12
 	)
@@ -216,43 +218,46 @@ func Test_IsWeeklyItemBoostrapPrecessingThreeChunks(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
 		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	rangeLower = rangeHigher + 1
 	rangeHigher = rangeHigher + maxChunkSize
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
 		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	rangeLower = rangeHigher + 1
 	rangeHigher = rangeHigher + maxChunkSize
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
 		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	client := NewSandboxFeedService(m)
 	client.ChunkSize = maxChunkSize
 
 	buffer := new(bytes.Buffer)
-	info, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
+	feedParams := &feedParams{Scope: scopeAllActive, marketID: expMarketID, CategoryID: expCategoryID, apiPath: pathGetItem}
+
+	info, err := client.download(context.Background(), feedParams, buffer)
 	assert.NilError(t, err)
 
 	assert.Equal(t, buffer.String(), expBodyChunk+expBodyChunk+expBodyChunk)
 	assert.Equal(t, info.CategoryID, expCategoryID)
 	assert.Equal(t, info.MarketID, expMarketID)
-	assert.Equal(t, info.Scope, scopeAllActive)
+	assert.Equal(t, info.Scope, expScope)
 	assert.Equal(t, info.Size, expLenght)
-	assert.Equal(t, info.LastModified, expLastModified)
+	assert.Equal(t, info.LastModified.Format(time.RFC1123), expLastModified)
 }
 
-func Test_IsWeeklyItemBoostrapPrecessingOneChunk(t *testing.T) {
+func Test_IsDownloadOneChunk(t *testing.T) {
 
 	var (
 		expMarketID     string = "EBAY_US"
 		expCategoryID   string = "1"
+		expScope        string = scopeAllActive
 		expLenght       int64  = 2000
 		expBodyChunk    string = "Hello World!"
 		expLastModified string = "Wed, 21 Oct 2015 07:28:00 GMT"
@@ -270,28 +275,31 @@ func Test_IsWeeklyItemBoostrapPrecessingOneChunk(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
 		Return(newHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	client := NewSandboxFeedService(m)
 
 	buffer := new(bytes.Buffer)
-	info, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
+	feedParams := &feedParams{Scope: scopeAllActive, marketID: expMarketID, CategoryID: expCategoryID, apiPath: pathGetItem}
+
+	info, err := client.download(context.Background(), feedParams, buffer)
 	assert.NilError(t, err)
 
 	assert.Equal(t, buffer.String(), expBodyChunk)
 	assert.Equal(t, info.CategoryID, expCategoryID)
 	assert.Equal(t, info.MarketID, expMarketID)
-	assert.Equal(t, info.Scope, scopeAllActive)
+	assert.Equal(t, info.Scope, expScope)
 	assert.Equal(t, info.Size, expLenght)
-	assert.Equal(t, info.LastModified, expLastModified)
+	assert.Equal(t, info.LastModified.Format(time.RFC1123), expLastModified)
 }
 
-func Test_IsWeeklyItemBoostrapReturningErrorReponse(t *testing.T) {
+func Test_IsDownloadReturningErrorReponse(t *testing.T) {
 
 	var (
 		expMarketID      string = "EBAY_US"
 		expCategoryID    string = "1"
+		expScope         string = scopeAllActive
 		expLenght        int64  = 2000
 		expLastModified  string = "Wed, 21 Oct 2015 07:28:00 GMT"
 		expEndpointURL   string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
@@ -317,25 +325,27 @@ func Test_IsWeeklyItemBoostrapReturningErrorReponse(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
 		Return(newHTTPResponse(http.StatusBadRequest, rangeLower, rangeHigher, expLenght, expLastModified, expErrorResponse), nil)
 
 	client := NewSandboxFeedService(m)
 
 	buffer := new(bytes.Buffer)
-	_, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
+	feedParams := &feedParams{Scope: scopeAllActive, marketID: expMarketID, CategoryID: expCategoryID, apiPath: pathGetItem}
+
+	_, err := client.download(context.Background(), feedParams, buffer)
 
 	assert.Error(t, err, "API Error\nGET https://api.sandbox.ebay.com/buy/feed/v1_beta/item HTTP/1.1\nHost: api.sandbox.ebay.com\nRespose Code: 400\n"+
 		"Erros: [{ErrorID:13022 Domain:API_BROWSE Category:REQUEST Message:The 'category_id' 200 submitted is not supported. LongMessage:The 'category_id' 200 submitted is not supported. "+
 		"Parameters:[{Name:categoryId Value:200}]}]\nWarnings: []")
 }
 
-func Test_IsWeeklyItemBoostrapSizeZeroIfNoContentFound(t *testing.T) {
+func Test_IsDownloadReturningErrorIfNoContentFound(t *testing.T) {
 
 	var (
 		expMarketID    string = "EBAY_US"
 		expCategoryID  string = "1"
-		expLenght      int64  = 0
+		expScope       string = scopeAllActive
 		expEndpointURL string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
 	)
 
@@ -350,27 +360,24 @@ func Test_IsWeeklyItemBoostrapSizeZeroIfNoContentFound(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
 		Return(newHTTPResponse(http.StatusNoContent, 0, 0, 0, "", ""), nil)
 
 	client := NewSandboxFeedService(m)
 
 	buffer := new(bytes.Buffer)
-	info, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
-	assert.NilError(t, err)
+	feedParams := &feedParams{Scope: scopeAllActive, marketID: expMarketID, CategoryID: expCategoryID, apiPath: pathGetItem}
 
-	assert.Equal(t, buffer.String(), "")
-	assert.Equal(t, info.CategoryID, expCategoryID)
-	assert.Equal(t, info.MarketID, expMarketID)
-	assert.Equal(t, info.Scope, scopeAllActive)
-	assert.Equal(t, info.Size, expLenght)
-	assert.Equal(t, info.LastModified, "")
+	_, err := client.download(context.Background(), feedParams, buffer)
+
+	assert.Error(t, err, "API No Content\nGET https://api.sandbox.ebay.com/buy/feed/v1_beta/item HTTP/1.1\nHost: api.sandbox.ebay.com\nRespose Code: 204\nErros: []\nWarnings: []")
 }
 
-func Test_IsWeeklyItemBoostrapReturningErrorIfHTTPError(t *testing.T) {
+func Test_IsDownloadReturningErrorIfHTTPError(t *testing.T) {
 	var (
 		expMarketID    string = "EBAY_US"
 		expCategoryID  string = "1"
+		expScope       string = scopeAllActive
 		expEndpointURL string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
 	)
 
@@ -385,12 +392,101 @@ func Test_IsWeeklyItemBoostrapReturningErrorIfHTTPError(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expCategoryID, expMarketID, expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
 		Return(nil, fmt.Errorf("HTTP Error"))
 
 	client := NewSandboxFeedService(m)
 
 	buffer := new(bytes.Buffer)
-	_, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
+	feedParams := &feedParams{Scope: scopeAllActive, marketID: expMarketID, CategoryID: expCategoryID, apiPath: pathGetItem}
+
+	_, err := client.download(context.Background(), feedParams, buffer)
+
 	assert.Error(t, err, "HTTP Error")
+}
+
+func Test_IsDalyNewsItems(t *testing.T) {
+
+	var (
+		expMarketID     string = "EBAY_US"
+		expCategoryID   string = "1"
+		expScope        string = scopeNewlyListed
+		expLenght       int64  = 36
+		expBody         string = "Hello World!"
+		expLastModified string = "Wed, 21 Oct 2015 07:28:00 GMT"
+		expEndpointURL  string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
+		expDate         string = "20200517"
+		maxChunkSize    int64  = DefaultSandboxMaxChunkSize
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	m := mock_ebay.NewMockHTTPClient(ctrl)
+
+	var (
+		rangeLower  int64 = 0
+		rangeHigher int64 = maxChunkSize
+	)
+
+	m.EXPECT().
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, expDate, expEndpointURL))).
+		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBody), nil)
+
+	client := NewSandboxFeedService(m)
+
+	date := time.Date(2020, time.May, 17, 0, 0, 0, 0, time.UTC)
+	buffer := new(bytes.Buffer)
+
+	info, err := client.DailyNewlyItems(context.Background(), expMarketID, expCategoryID, date, buffer)
+	assert.NilError(t, err)
+
+	assert.Equal(t, buffer.String(), expBody)
+	assert.Equal(t, info.CategoryID, expCategoryID)
+	assert.Equal(t, info.MarketID, expMarketID)
+	assert.Equal(t, info.Scope, expScope)
+	assert.Equal(t, info.Size, expLenght)
+	assert.Equal(t, info.LastModified.Format(time.RFC1123), expLastModified)
+}
+
+func Test_IsWeeklyItemBoostrap(t *testing.T) {
+
+	var (
+		expMarketID     string = "EBAY_US"
+		expCategoryID   string = "1"
+		expScope        string = scopeAllActive
+		expLenght       int64  = 36
+		expBody         string = "Hello World!"
+		expLastModified string = "Wed, 21 Oct 2015 07:28:00 GMT"
+		expEndpointURL  string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItem
+		maxChunkSize    int64  = DefaultSandboxMaxChunkSize
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	m := mock_ebay.NewMockHTTPClient(ctrl)
+
+	var (
+		rangeLower  int64 = 0
+		rangeHigher int64 = maxChunkSize
+	)
+
+	m.EXPECT().
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
+		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBody), nil)
+
+	client := NewSandboxFeedService(m)
+
+	buffer := new(bytes.Buffer)
+
+	info, err := client.WeeklyItemBoostrap(context.Background(), expMarketID, expCategoryID, buffer)
+	assert.NilError(t, err)
+
+	assert.Equal(t, buffer.String(), expBody)
+	assert.Equal(t, info.CategoryID, expCategoryID)
+	assert.Equal(t, info.MarketID, expMarketID)
+	assert.Equal(t, info.Scope, expScope)
+	assert.Equal(t, info.Size, expLenght)
+	assert.Equal(t, info.LastModified.Format(time.RFC1123), expLastModified)
 }
