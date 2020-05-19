@@ -28,13 +28,16 @@ const (
 	DefaultProdMaxChunkSize int64 = 10485760
 
 	//  Feed API Path
-	pathGetItem string = "item"
+	pathGetItem         string = "item"
+	pathGetItemSnapshot string = "item_snapshot"
+	pathGetItemGroup    string = "item_group"
 
 	// Feed API Parameters
 	scopeNewlyListed string = "NEWLY_LISTED"
 	scopeAllActive   string = "ALL_ACTIVE"
 
-	dateFormat string = "20060102"
+	dateFormat         string = "20060102"
+	snapshotDataFormat string = "2006-01-02T15:04:05.000Z"
 
 	// Header
 	headerRange         string = "Range"
@@ -79,6 +82,8 @@ func NewProdFeedService(httpClient HTTPClient) *FeedService {
 // FeedInfo containts information about the feed when the download is successful
 // In case not content is found for the given feed criteria, the size will be zero
 type FeedInfo struct {
+	// Type is the type of the feed
+	Type string
 	// CategoryID is the eBay category ID associated to this feed
 	CategoryID string
 	// MarketID is the eBay marketplace ID associated to this feed
@@ -101,7 +106,7 @@ func (f *FeedService) WeeklyItemBoostrap(ctx context.Context, marketID, category
 	return f.download(ctx, params, dst)
 }
 
-// DailyNewlyItems downloads the feed containing all the newly listed items for the given eBay market id, category id and date
+// DailyNewlyItems downloads the feed containing all the newly listed items for the given eBay market id, category id and date.
 // The feed is written into the given destination which has to implement the io.Writer interface. The feed is encodedd in
 // Tab Separated Value (TSV) format and gzip compressed: it is required to gunzip the feed before reading it.
 // The function returns a FeedInfo object encoding the information abouth the downloaded file.
@@ -111,13 +116,24 @@ func (f *FeedService) DailyNewlyItems(ctx context.Context, marketID, categoryID 
 	return f.download(ctx, params, dst)
 }
 
+// ItemShapshot downloads the hourly snapshot feed containing the details of all the items have changed within the specified GMT day and hour for the given category.
+// The feed is written into the given destination which has to implement the io.Writer interface. The feed is encodedd in
+// Tab Separated Value (TSV) format and gzip compressed: it is required to gunzip the feed before reading it.
+// The function returns a FeedInfo object encoding the information abouth the downloaded file.
+// https://developer.ebay.com/api-docs/buy/feed/resources/item_snapshot/methods/getItemSnapshotFeed
+func (f *FeedService) ItemShapshot(ctx context.Context, marketID, categoryID string, date time.Time, dst io.Writer) (*FeedInfo, error) {
+	params := &feedParams{CategoryID: categoryID, marketID: marketID, SnapshotDate: date.Format(snapshotDataFormat), apiPath: pathGetItemSnapshot}
+	return f.download(ctx, params, dst)
+}
+
 // feedParams is Feed API query parameters
 type feedParams struct {
-	Scope      string `url:"feed_scope"`
-	CategoryID string `url:"category_id"`
-	Date       string `url:"date,omitempty"`
-	marketID   string
-	apiPath    string
+	CategoryID   string `url:"category_id"`
+	Scope        string `url:"feed_scope,omitempty"`
+	Date         string `url:"date,omitempty"`
+	SnapshotDate string `url:"snapshot_date,omitempty"`
+	marketID     string
+	apiPath      string
 }
 
 // download is an helper function which implement the logic to download a multi-parts file feed
@@ -143,7 +159,7 @@ func (f *FeedService) download(ctx context.Context, params *feedParams, dst io.W
 
 	responseStatus := http.StatusPartialContent
 
-	// Loop until all chunks are completed
+	// Loop until response is partial and all chunks are completed
 	for responseStatus == http.StatusPartialContent && rangeLower < lenght {
 
 		rq, err := buildHTTPRequest(endpointURL, params, rangeLower, rangeUpper)
@@ -176,13 +192,13 @@ func (f *FeedService) download(ctx context.Context, params *feedParams, dst io.W
 			return nil, NewErrorResponse(rs)
 		}
 
-		info.Size = lenght
-		info.LastModified, err = time.Parse(time.RFC1123, lastModified)
-		if err != nil {
-			return nil, fmt.Errorf("download(): cannot read lastModified: %v", err)
-		}
-
 		rs.Body.Close()
+	}
+
+	info.Size = lenght
+	info.LastModified, err = time.Parse(time.RFC1123, lastModified)
+	if err != nil {
+		return nil, fmt.Errorf("download(): cannot read lastModified: %v", err)
 	}
 
 	return info, nil

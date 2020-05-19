@@ -18,17 +18,16 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-func newHTTPRequest(rangeLower, rangeUpper int64, scope, categoryID, marketID, date, endpointURL string) *http.Request {
+func newHTTPRequest(rangeLower, rangeUpper int64, params *feedParams, endpointURL string) *http.Request {
 
 	u, _ := url.Parse(endpointURL)
-	q, _ := query.Values(feedParams{
-		Scope: scope, CategoryID: categoryID, Date: date})
+	q, _ := query.Values(params)
 
 	u.RawQuery = q.Encode()
 
 	r, _ := http.NewRequest("GET", u.String(), nil)
 
-	r.Header.Set(headerMarketplaceID, marketID)
+	r.Header.Set(headerMarketplaceID, params.marketID)
 	r.Header.Set(headerRange, fmt.Sprintf("bytes=%v-%v", rangeLower, rangeUpper))
 
 	r.WithContext(context.Background())
@@ -176,7 +175,7 @@ func Test_buildHTTPRequest(t *testing.T) {
 				rangeLower:  expRangeLower,
 				rangeUpper:  expRangeUpper,
 			},
-			want:    newHTTPRequest(expRangeLower, expRangeUpper, expScope, expCategoryID, expMarketID, "", expEndpointURL),
+			want:    newHTTPRequest(expRangeLower, expRangeUpper, &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID}, expEndpointURL),
 			wantErr: false,
 		},
 	}
@@ -218,21 +217,21 @@ func Test_IsDownloadThreeChunks(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID}, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	rangeLower = rangeHigher + 1
 	rangeHigher = rangeHigher + maxChunkSize
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID}, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	rangeLower = rangeHigher + 1
 	rangeHigher = rangeHigher + maxChunkSize
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID}, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	client := NewSandboxFeedService(m)
@@ -275,7 +274,7 @@ func Test_IsDownloadOneChunk(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID}, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBodyChunk), nil)
 
 	client := NewSandboxFeedService(m)
@@ -325,7 +324,7 @@ func Test_IsDownloadReturningErrorReponse(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID}, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusBadRequest, rangeLower, rangeHigher, expLenght, expLastModified, expErrorResponse), nil)
 
 	client := NewSandboxFeedService(m)
@@ -360,7 +359,7 @@ func Test_IsDownloadReturningErrorIfNoContentFound(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID}, expEndpointURL))).
 		Return(newHTTPResponse(http.StatusNoContent, 0, 0, 0, "", ""), nil)
 
 	client := NewSandboxFeedService(m)
@@ -392,7 +391,7 @@ func Test_IsDownloadReturningErrorIfHTTPError(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID}, expEndpointURL))).
 		Return(nil, fmt.Errorf("HTTP Error"))
 
 	client := NewSandboxFeedService(m)
@@ -430,8 +429,8 @@ func Test_IsDalyNewsItems(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, expDate, expEndpointURL))).
-		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBody), nil)
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID, Date: expDate}, expEndpointURL))).
+		Return(newHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBody), nil)
 
 	client := NewSandboxFeedService(m)
 
@@ -473,8 +472,8 @@ func Test_IsWeeklyItemBoostrap(t *testing.T) {
 	)
 
 	m.EXPECT().
-		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, expScope, expCategoryID, expMarketID, "", expEndpointURL))).
-		Return(newHTTPResponse(http.StatusPartialContent, rangeLower, rangeHigher, expLenght, expLastModified, expBody), nil)
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, &feedParams{Scope: expScope, CategoryID: expCategoryID, marketID: expMarketID}, expEndpointURL))).
+		Return(newHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBody), nil)
 
 	client := NewSandboxFeedService(m)
 
@@ -487,6 +486,48 @@ func Test_IsWeeklyItemBoostrap(t *testing.T) {
 	assert.Equal(t, info.CategoryID, expCategoryID)
 	assert.Equal(t, info.MarketID, expMarketID)
 	assert.Equal(t, info.Scope, expScope)
+	assert.Equal(t, info.Size, expLenght)
+	assert.Equal(t, info.LastModified.Format(time.RFC1123), expLastModified)
+}
+
+func Test_IsItemSnapshot(t *testing.T) {
+
+	var (
+		expMarketID     string = "EBAY_US"
+		expCategoryID   string = "1"
+		expLenght       int64  = 36
+		expBody         string = "Hello World!"
+		expLastModified string = "Wed, 21 Oct 2015 07:28:00 GMT"
+		expDate         string = "2020-05-17T16:00:00.000Z"
+		expEndpointURL  string = DefaultSandboxBaseURL + DefaultAPIVersion + "/" + pathGetItemSnapshot
+		maxChunkSize    int64  = DefaultSandboxMaxChunkSize
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	m := mock_ebay.NewMockHTTPClient(ctrl)
+
+	var (
+		rangeLower  int64 = 0
+		rangeHigher int64 = maxChunkSize
+	)
+
+	m.EXPECT().
+		Do(gomock.Eq(newHTTPRequest(rangeLower, rangeHigher, &feedParams{CategoryID: expCategoryID, marketID: expMarketID, SnapshotDate: expDate}, expEndpointURL))).
+		Return(newHTTPResponse(http.StatusOK, rangeLower, rangeHigher, expLenght, expLastModified, expBody), nil)
+
+	client := NewSandboxFeedService(m)
+
+	date := time.Date(2020, time.May, 17, 16, 0, 0, 0, time.UTC)
+	buffer := new(bytes.Buffer)
+
+	info, err := client.ItemShapshot(context.Background(), expMarketID, expCategoryID, date, buffer)
+	assert.NilError(t, err)
+
+	assert.Equal(t, buffer.String(), expBody)
+	assert.Equal(t, info.CategoryID, expCategoryID)
+	assert.Equal(t, info.MarketID, expMarketID)
 	assert.Equal(t, info.Size, expLenght)
 	assert.Equal(t, info.LastModified.Format(time.RFC1123), expLastModified)
 }
